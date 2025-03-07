@@ -74,4 +74,7 @@ config.local.json
 
 # 临时文件
 tmp/
-temp/ 
+temp/
+
+# Lambda Layers
+lambda_layers/ 
