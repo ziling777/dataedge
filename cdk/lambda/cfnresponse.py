@@ -4,6 +4,7 @@
 import json
 import logging
 import urllib.request
+from urllib.parse import urlparse, parse_qs
 
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
@@ -15,7 +16,7 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
     responseUrl = event['ResponseURL']
 
     logger.info(f"ResponseURL: {responseUrl}")
-
+    
     responseBody = {
         'Status': responseStatus,
         'Reason': reason or f"See the details in CloudWatch Log Stream: {context.log_stream_name}",
@@ -31,12 +32,15 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
     logger.info(f"Response body: {json_responseBody}")
 
     headers = {
-        'content-type': '',
+        'content-type': '',  # 重要：保持为空字符串
         'content-length': str(len(json_responseBody))
     }
 
     try:
-        req = urllib.request.Request(responseUrl, json_responseBody.encode('utf-8'), headers)
+        req = urllib.request.Request(responseUrl, 
+                                   data=json_responseBody.encode('utf-8'),
+                                   headers=headers,
+                                   method='PUT')  # 使用 PUT 方法
         with urllib.request.urlopen(req) as response:
             logger.info(f"Status code: {response.getcode()}")
             logger.info(f"Status message: {response.msg}")

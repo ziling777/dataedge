@@ -10,8 +10,14 @@ def handler(event, context):
     """
     Lambda 处理程序，用于注册 Lake Formation 资源
     """
-    logger.info('Received event: %s', json.dumps(event))
+    logger.info('Received event: %s', json.dumps(event, indent=2))
     logger.info(f"Using boto3 version: {boto3.__version__}")
+    
+    # 打印 Lambda 上下文信息
+    logger.info(f"Function name: {context.function_name}")
+    logger.info(f"Function version: {context.function_version}")
+    logger.info(f"Memory limit: {context.memory_limit_in_mb}")
+    logger.info(f"Time remaining: {context.get_remaining_time_in_millis()}")
     
     response_data = {}
     physical_id = 'LakeFormationResource'

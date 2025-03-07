@@ -461,6 +461,28 @@ class S3TableCdkStack(Stack):
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         )
 
+        # 在创建 lakeformation_resource_role 时添加 S3 权限
+        lakeformation_resource_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "s3:PutObject"  # 允许向 S3 写入响应
+                ],
+                resources=["*"]  # 您可以限制到特定的 S3 bucket
+            )
+        )
+
+        # 添加 CloudFormation 相关权限
+        lakeformation_resource_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "cloudformation:SignalResource"  # 允许向 CloudFormation 发送信号
+                ],
+                resources=["*"]
+            )
+        )
+
         # 创建 Lake Formation 权限管理的 Lambda 函数
         lakeformation_permissions_lambda = lambda_.Function(
             self, "LakeFormationPermissionsLambda",
