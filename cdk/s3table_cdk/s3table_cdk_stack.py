@@ -22,6 +22,8 @@ from aws_cdk import (
 )
 from constructs import Construct
 import json
+import time
+import boto3
 
 class S3TableCdkStack(Stack):
 
@@ -52,7 +54,7 @@ class S3TableCdkStack(Stack):
         # Lambda函数 - 处理SQS消息
         processing_lambda = lambda_.Function(
             self, "ProcessingFunction",
-            runtime=lambda_.Runtime.PYTHON_3_9,
+            runtime=lambda_.Runtime.PYTHON_3_13,
             handler="index.handler",
             code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
@@ -218,10 +220,22 @@ class S3TableCdkStack(Stack):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "glue:CreateCatalog",
-                    "glue:DeleteCatalog",
-                    "glue:GetCatalog",
-                    "glue:UpdateCatalog"
+                    "*"
+                ],
+                resources=["*"]
+            )
+        )
+
+                # 添加 Lake Formation 权限
+        glue_catalog_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "lakeformation:GetDataAccess",
+                    "lakeformation:GrantPermissions",
+                    "lakeformation:GetCatalogResource",
+                    "lakeformation:ListPermissions",
+                    "lakeformation:GetDataLakeSettings"
                 ],
                 resources=["*"]
             )
@@ -232,72 +246,27 @@ class S3TableCdkStack(Stack):
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         )
 
+        # 创建 boto3 Layer
+        boto3_layer = lambda_.LayerVersion(
+            self, "Boto3Layer",
+            code=lambda_.Code.from_asset("lambda_layers/boto3"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
+            description="Layer containing latest boto3 version"
+        )
+
+        # 修改 Lambda 函数，确保使用正确的角色
         create_catalog_lambda = lambda_.Function(
-            self, "CreateGlueCatalogLambda",
-            runtime=lambda_.Runtime.PYTHON_3_9,
-            handler="index.handler",
-            code=lambda_.Code.from_inline("""
-import boto3
-import cfnresponse
-import logging
-import json
-
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-def handler(event, context):
-    logger.info('Received event: %s', event)
-    
-    response_data = {}
-    physical_id = 'S3TablesCatalog'
-    
-    try:
-        request_type = event['RequestType']
-        glue_client = boto3.client('glue')
-        
-        if request_type == 'Create':
-            logger.info('Creating Glue Federated Catalog')
-            
-            catalog_input = {
-                "Name": "s3tablescatalog",
-                "CatalogInput": {
-                    "FederatedCatalog": {
-                        "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/*",
-                        "ConnectionName": "aws:s3tables"
-                    },
-                    "CreateDatabaseDefaultPermissions": [],
-                    "CreateTableDefaultPermissions": []
-                }
-            }
-            
-            logger.info(f'Creating catalog with input: {json.dumps(catalog_input)}')
-            response = glue_client.create_catalog(**catalog_input)
-            
-            response_data['CatalogName'] = 's3tablescatalog'
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physical_id)
-            
-        elif request_type == 'Update':
-            logger.info('Updating Glue Federated Catalog - no action needed')
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physical_id)
-            
-        elif request_type == 'Delete':
-            logger.info('Deleting Glue Federated Catalog')
-            try:
-                glue_client.delete_catalog(
-                    Name='s3tablescatalog'
-                )
-            except Exception as e:
-                logger.error('Error deleting catalog: %s', e)
-                # 即使删除失败也继续，因为资源可能已经不存在
-                
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physical_id)
-            
-    except Exception as e:
-        logger.error('Error: %s', e)
-        cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)}, physical_id)
-"""),
+            self, "CreateCatalogLambda",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            handler="glue_catalog_handler.handler",
+            code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
-            role=glue_catalog_role
+            memory_size=256,
+            layers=[boto3_layer],
+            role=glue_catalog_role,
+            environment={
+                "BUCKET_NAME": data_bucket.bucket_name
+            }
         )
         
         # 使用自定义资源调用Lambda
@@ -312,7 +281,9 @@ def handler(event, context):
             service_token=s3tables_catalog.service_token,
             properties={
                 "Region": Aws.REGION,
-                "AccountId": Aws.ACCOUNT_ID
+                "AccountId": Aws.ACCOUNT_ID,
+                "Version": "1.1",  # 每次需要更新时递增此值
+                "Timestamp": str(int(time.time()))  # 添加时间戳确保每次部署都不同
             }
         )
 
@@ -434,3 +405,148 @@ def handler(event, context):
             value="s3tablescatalog",
             description="Name of the Glue Federated Catalog for S3 Tables"
         )
+
+        # 创建 Lake Formation 权限管理的 Lambda 角色
+        lakeformation_permissions_role = iam.Role(
+            self, "LakeFormationPermissionsRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
+        )
+
+        # 添加 Lake Formation 权限
+        lakeformation_permissions_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "lakeformation:GetDataLakeSettings",
+                    "lakeformation:PutDataLakeSettings"
+                ],
+                resources=["*"]
+            )
+        )
+
+        # 添加基本的 Lambda 执行权限
+        lakeformation_permissions_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+        )
+
+        # 创建 Lake Formation 资源注册的 Lambda 角色
+        lakeformation_resource_role = iam.Role(
+            self, "LakeFormationResourceRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com")
+        )
+
+        # 添加 Lake Formation 权限
+        lakeformation_resource_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "lakeformation:RegisterResource",
+                    "lakeformation:DeregisterResource"
+                ],
+                resources=["*"]
+            )
+        )
+
+        # 添加 IAM PassRole 权限
+        lakeformation_resource_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["iam:PassRole"],
+                resources=[s3tables_lakeformation_role.role_arn]  # 明确指定可以传递的角色
+            )
+        )
+
+        # 添加基本的 Lambda 执行权限
+        lakeformation_resource_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
+        )
+
+        # 创建 Lake Formation 权限管理的 Lambda 函数
+        lakeformation_permissions_lambda = lambda_.Function(
+            self, "LakeFormationPermissionsLambda",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            handler="lakeformation_permissions_handler.handler",
+            code=lambda_.Code.from_asset("lambda"),
+            timeout=Duration.seconds(300),
+            memory_size=256,
+            layers=[boto3_layer],
+            role=lakeformation_permissions_role
+        )
+
+        # 创建自定义资源提供者
+        lakeformation_permissions_provider = cr.Provider(
+            self, "LakeFormationPermissionsProvider",
+            on_event_handler=lakeformation_permissions_lambda
+        )
+
+        # 创建自定义资源，设置 Lake Formation 权限
+        lakeformation_permissions_resource = CustomResource(
+            self, "LakeFormationPermissionsResource",
+            service_token=lakeformation_permissions_provider.service_token,
+            properties={
+                "RoleArns": [
+                    glue_catalog_role.role_arn,
+                    emr_execution_role.role_arn,
+                    lakeformation_resource_role.role_arn
+                ],
+                "Version": "1.0",
+                "Timestamp": str(int(time.time()))
+            }
+        )
+
+        # 设置 Lake Formation 权限资源依赖于 IAM 角色
+        lakeformation_permissions_resource.node.add_dependency(glue_catalog_role)
+        lakeformation_permissions_resource.node.add_dependency(emr_execution_role)
+        lakeformation_permissions_resource.node.add_dependency(lakeformation_resource_role)
+
+
+        # 重要：修改 Glue Catalog 资源的创建顺序，使其依赖于 Lake Formation 权限
+        # 注意：这里需要修改之前的代码，将 s3tables_catalog_resource 的创建移到 lakeformation_permissions_resource 之后
+        # 或者添加依赖关系
+        s3tables_catalog_resource.node.add_dependency(lakeformation_permissions_resource)
+
+        # EMR 应用程序依赖于 Lake Formation 权限
+        emr_app.node.add_dependency(lakeformation_permissions_resource)
+
+        # 如果有 EMR 作业自定义资源，也添加依赖
+        if 'emr_job_custom_resource' in vars():
+            emr_job_custom_resource.node.add_dependency(lakeformation_permissions_resource)
+
+        # 创建 Lake Formation 资源注册的 Lambda 函数
+        lakeformation_resource_lambda = lambda_.Function(
+            self, "LakeFormationResourceLambda",
+            runtime=lambda_.Runtime.PYTHON_3_13,
+            handler="lakeformation_resource_handler.handler",
+            code=lambda_.Code.from_asset("lambda"),
+            timeout=Duration.seconds(300),
+            memory_size=256,
+            layers=[boto3_layer],
+            role=lakeformation_resource_role
+        )
+
+        # 创建自定义资源提供者
+        lakeformation_resource_provider = cr.Provider(
+            self, "LakeFormationResourceProvider",
+            on_event_handler=lakeformation_resource_lambda
+        )
+
+        # 创建自定义资源，注册 S3 Tables 资源
+        lakeformation_resource_registration = CustomResource(
+            self, "LakeFormationResourceRegistration",
+            service_token=lakeformation_resource_provider.service_token,
+            properties={
+                "ResourceArn": f"arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/*",
+                "ResourceRoleArn": s3tables_lakeformation_role.role_arn,
+                "Version": "1.0",
+                "Timestamp": str(int(time.time()))
+            }
+        )
+
+        # 设置依赖关系
+        lakeformation_resource_registration.node.add_dependency(s3tables_lakeformation_role)
+        lakeformation_resource_registration.node.add_dependency(lakeformation_permissions_resource)
+
+        # 确保 Glue Catalog 资源依赖于资源注册
+        s3tables_catalog_resource.node.add_dependency(lakeformation_resource_registration)
+
+        
