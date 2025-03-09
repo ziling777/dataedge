@@ -1,115 +1,79 @@
-# Welcome to your CDK Python project!
+# S3 Tables CDK Project
 
-This is a blank project for CDK development with Python.
+这个 CDK 项目用于部署 S3 Tables 相关的基础设施。
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## 前置条件
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+- Python 3.8 或更高版本
+- AWS CDK CLI (`npm install -g aws-cdk`)
+- AWS 凭证已配置
 
-## Setup
+## 快速开始
 
-### Create and activate virtualenv
+1. **创建并激活虚拟环境**
 
-To manually create a virtualenv on MacOS and Linux:
+```bash
+# 创建虚拟环境
+python -m venv .venv
 
-```
-$ python3 -m venv .venv
-```
-
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
-
-```
-$ source .venv/bin/activate
+# 激活虚拟环境
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
 ```
 
-If you are a Windows platform, you would activate the virtualenv like this:
+2. **安装依赖**
 
-```
-% .venv\Scripts\activate.bat
-```
-
-### Install dependencies
-
-Once the virtualenv is activated, you can install the required dependencies.
-
-```
-$ pip install -r requirements.txt
+```bash
+pip install -r requirements.txt
 ```
 
-### Create boto3 Lambda Layer
+3. **创建 Lambda Layer**
 
-Before deploying the CDK stack, you need to create the boto3 Lambda Layer that will be used by the Lambda functions. This layer contains the latest version of boto3, which may be required for certain AWS API calls.
-
-Run the following command to create the boto3 layer:
-
-```
-$ python create_boto3_layer.py
+```bash
+python create_boto3_layer.py
 ```
 
-This script will:
-1. Create the necessary directory structure (`lambda_layers/boto3/python`)
-2. Install the latest version of boto3 into this directory
-3. Prepare the layer for deployment with the CDK stack
+4. **部署 CDK Stack**
 
-### Deploy the stack
+```bash
+# 首次部署前需要引导
+cdk bootstrap
 
-At this point you can now synthesize the CloudFormation template for this code.
+# 查看变更
+cdk diff
 
-```
-$ cdk synth
-```
-
-To deploy the stack to your AWS account:
-
-```
-$ cdk deploy
+# 部署
+cdk deploy
 ```
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
+## 项目结构
 
-## Project Structure
+```
+.
+├── lambda/                  # Lambda 函数代码
+├── lambda_layers/          # Lambda layers
+├── s3table_cdk/           # CDK 应用代码
+└── tests/                 # 测试代码
+```
 
-- `lambda/` - Contains Lambda function code
-  - `index.py` - Lambda function for processing S3 events
-  - `glue_catalog_handler.py` - Lambda function for managing Glue Federated Catalog
-  - `cfnresponse.py` - Helper module for CloudFormation custom resources
-- `lambda_layers/` - Contains Lambda layers
-  - `boto3/` - Layer with latest boto3 version
-- `emr_job/` - Contains EMR job scripts
-- `s3table_cdk/` - Contains CDK stack definition
+## 常见问题
 
-## Useful commands
+1. **CDK CLI 版本不匹配**
+   - 更新 CDK CLI: `npm install -g aws-cdk`
+   - 或修改 requirements.txt 中的 aws-cdk-lib 版本
 
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
+2. **Lambda Layer 创建失败**
+   - 确保有网络连接
+   - 检查 Python 版本兼容性
 
-## Troubleshooting
+## 注意事项
 
-### Lambda Layer Issues
+- 确保 `.gitignore` 正确配置，避免提交不必要的文件
+- 部署前请检查 AWS 配置是否正确
+- 使用 `cdk destroy` 清理资源
 
-If you encounter issues with the Lambda Layer:
+## 许可证
 
-1. Make sure you've run `python create_boto3_layer.py` before deploying
-2. Check that the `lambda_layers/boto3/python` directory contains boto3 and its dependencies
-3. If you update the boto3 version, you may need to run the script again and redeploy
-
-### Path Issues
-
-If you encounter path-related errors during deployment:
-
-1. Make sure you're running CDK commands from the `cdk` directory
-2. Verify that the paths in `s3table_cdk_stack.py` are correct relative to where you're running the commands
-3. Use absolute paths if necessary to avoid confusion
-
-Enjoy!
+This project is licensed under the MIT License - see the LICENSE file for details

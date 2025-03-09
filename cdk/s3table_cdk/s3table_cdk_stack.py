@@ -21,9 +21,7 @@ from aws_cdk import (
     CustomResource
 )
 from constructs import Construct
-import json
 import time
-import boto3
 
 class S3TableCdkStack(Stack):
 
