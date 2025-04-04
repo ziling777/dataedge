@@ -46,7 +46,7 @@ class S3TableCdkStack(Stack):
         data_bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
             s3n.SqsDestination(data_queue),
-            s3.NotificationKeyFilter(prefix="raw/", suffix=".parquet.gz")
+            s3.NotificationKeyFilter(prefix="raw/", suffix=".zip")
         )
 
         # Lambda函数 - 处理SQS消息
@@ -73,7 +73,20 @@ class S3TableCdkStack(Stack):
         # EC2实例 - 生成数据并上传到S3
         vpc = ec2.Vpc(
             self, "DataGenerationVPC",
-            max_azs=2
+            max_azs=2,
+            nat_gateways=1,  # 添加NAT网关
+            subnet_configuration=[
+                ec2.SubnetConfiguration(
+                    name="Public",
+                    subnet_type=ec2.SubnetType.PUBLIC,
+                    cidr_mask=24
+                ),
+                ec2.SubnetConfiguration(
+                    name="Private",
+                    subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
+                    cidr_mask=24
+                )
+            ]
         )
 
         # EC2 IAM角色与策略
@@ -95,7 +108,11 @@ class S3TableCdkStack(Stack):
             machine_image=ec2.AmazonLinuxImage(
                 generation=ec2.AmazonLinuxGeneration.AMAZON_LINUX_2023
             ),
-            role=ec2_role
+            role=ec2_role,
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PUBLIC  # 指定使用公有子网
+            ),
+            associate_public_ip_address=True  # 启用公网IP
         )
 
         # EMR Serverless应用程序
@@ -106,9 +123,25 @@ class S3TableCdkStack(Stack):
         
         data_bucket.grant_read_write(emr_execution_role)
         
+        # 添加Glue管理员权限
+        emr_execution_role.add_to_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["glue:*"],  # 授予所有Glue权限
+                resources=["*"]
+            )
+        )
+        
+        # 输出EMR执行角色的ARN
+        CfnOutput(
+            self, "EMRExecutionRoleArn",
+            value=emr_execution_role.role_arn,
+            description="ARN of the EMR Serverless execution role"
+        )
+        
         emr_app = emrs.CfnApplication(
             self, "DataProcessingEMRApp",
-            release_label="emr-6.6.0",
+            release_label="emr-7.7.0",
             type="SPARK",
             name="DataProcessingApp",
             initial_capacity=[

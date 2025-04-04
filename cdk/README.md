@@ -77,3 +77,15 @@ cdk deploy
 ## 许可证
 
 This project is licensed under the MIT License - see the LICENSE file for details
+
+## 常见问题
+
+如果见到下面的问题：
+```
+This CDK CLI is not compatible with the CDK library used by your application. Please upgrade the CLI to the latest version.
+```
+请升级 CDK CLI：
+```
+npm install -g aws-cdk
+```
+
