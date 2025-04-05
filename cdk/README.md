@@ -32,7 +32,8 @@ pip install -r requirements.txt
 3. **创建 Lambda Layer**
 
 ```bash
-python create_boto3_layer.py
+rm -rf lambda_layers
+python create_layer.py
 ```
 
 4. **部署 CDK Stack**
