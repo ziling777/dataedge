@@ -70,6 +70,15 @@ class S3TableCdkStack(Stack):
         # 给Lambda授予S3读写权限
         data_bucket.grant_read_write(processing_lambda)
 
+        # 添加HeadObject权限
+        processing_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["s3:HeadObject"],
+                resources=[data_bucket.arn_for_objects("*")]
+            )
+        )
+
         # EC2实例 - 生成数据并上传到S3
         vpc = ec2.Vpc(
             self, "DataGenerationVPC",
