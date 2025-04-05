@@ -279,10 +279,10 @@ class S3TableCdkStack(Stack):
 
         # 创建 boto3 Layer
         boto3_layer = lambda_.LayerVersion(
-            self, "Boto3Layer",
+            self, "greptime layer",
             code=lambda_.Code.from_asset("lambda_layers/"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
-            description="Layer containing latest boto3 version"
+            description="Layer containing greptime required packages"
         )
 
         # 修改 Lambda 函数，确保使用正确的角色
