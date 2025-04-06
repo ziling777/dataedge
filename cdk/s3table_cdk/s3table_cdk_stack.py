@@ -58,7 +58,7 @@ class S3TableCdkStack(Stack):
             timeout=Duration.seconds(300),
             memory_size=1024,
             environment={
-                "BUCKET_NAME": data_bucket.bucket_name
+                "S3_BUCKET": data_bucket.bucket_name
             }
         )
 

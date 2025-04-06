@@ -26,6 +26,7 @@ source .venv/bin/activate
 2. **安装依赖**
 
 ```bash
+pip install --upgrade aws-cdk-lib
 pip install -r requirements.txt
 ```
 
