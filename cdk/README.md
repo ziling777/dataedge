@@ -30,14 +30,7 @@ pip install --upgrade aws-cdk-lib
 pip install -r requirements.txt
 ```
 
-3. **创建 Lambda Layer**
-
-```bash
-rm -rf lambda_layers
-python create_layer.py
-```
-
-4. **部署 CDK Stack**
+3. **部署 CDK Stack**
 
 ```bash
 # 首次部署前需要引导
