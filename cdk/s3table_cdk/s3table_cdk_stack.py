@@ -49,6 +49,14 @@ class S3TableCdkStack(Stack):
             s3.NotificationKeyFilter(prefix="raw/", suffix=".zip")
         )
 
+        # 创建 lambda Layer
+        lambda_layer = lambda_.LayerVersion(
+            self, "greptime layer",
+            code=lambda_.Code.from_asset("lambda_layers/"),
+            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
+            description="Layer containing greptime required packages"
+        )
+
         # Lambda函数 - 处理SQS消息
         processing_lambda = lambda_.Function(
             self, "ProcessingFunction",
@@ -57,6 +65,7 @@ class S3TableCdkStack(Stack):
             code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
             memory_size=1024,
+            layers=[lambda_layer],
             environment={
                 "S3_BUCKET": data_bucket.bucket_name
             }
@@ -286,14 +295,6 @@ class S3TableCdkStack(Stack):
             iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole")
         )
 
-        # 创建 boto3 Layer
-        boto3_layer = lambda_.LayerVersion(
-            self, "greptime layer",
-            code=lambda_.Code.from_asset("lambda_layers/"),
-            compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
-            description="Layer containing greptime required packages"
-        )
-
         # 修改 Lambda 函数，确保使用正确的角色
         create_catalog_lambda = lambda_.Function(
             self, "CreateCatalogLambda",
@@ -302,7 +303,6 @@ class S3TableCdkStack(Stack):
             code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
             memory_size=256,
-            layers=[boto3_layer],
             role=glue_catalog_role,
             environment={
                 "BUCKET_NAME": data_bucket.bucket_name
@@ -531,7 +531,6 @@ class S3TableCdkStack(Stack):
             code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
             memory_size=256,
-            layers=[boto3_layer],
             role=lakeformation_permissions_role
         )
 
@@ -582,7 +581,6 @@ class S3TableCdkStack(Stack):
             code=lambda_.Code.from_asset("lambda"),
             timeout=Duration.seconds(300),
             memory_size=256,
-            layers=[boto3_layer],
             role=lakeformation_resource_role
         )
 
