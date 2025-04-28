@@ -28,6 +28,7 @@ source .venv/bin/activate
 ```bash
 pip install --upgrade aws-cdk-lib
 pip install -r requirements.txt
+pip install --upgrade aws-cdk-lib
 ```
 
 3. **部署 CDK Stack**

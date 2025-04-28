@@ -54,6 +54,7 @@ class S3TableCdkStack(Stack):
             self, "greptime layer",
             code=lambda_.Code.from_asset("lambda_layers/"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
+            compatible_architectures=[lambda_.Architecture.X86_64, lambda_.Architecture.ARM_64],
             description="Layer containing greptime required packages"
         )
 
@@ -608,5 +609,3 @@ class S3TableCdkStack(Stack):
 
         # 确保 Glue Catalog 资源依赖于资源注册
         s3tables_catalog_resource.node.add_dependency(lakeformation_resource_registration)
-
-        
