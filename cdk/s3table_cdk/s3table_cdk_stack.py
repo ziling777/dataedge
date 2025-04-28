@@ -381,7 +381,10 @@ class S3TableCdkStack(Stack):
                     "jobDriver": {
                         "sparkSubmit": {
                             "entryPoint": f"s3://{data_bucket.bucket_name}/scripts/process_data.py",
-                            "sparkSubmitParameters": "--conf spark.executor.cores=4 --conf spark.executor.memory=8g"
+                            "entryPointArguments": [
+                                data_bucket.bucket_name  # 传递S3桶名作为参数
+                            ],
+                            "sparkSubmitParameters": "--conf spark.executor.cores=4 --conf spark.executor.memory=8g --conf spark.sql.catalog.s3tablescatalog=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.s3tablescatalog.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog --conf spark.sql.catalog.s3tablescatalog.warehouse=arn:aws:s3tables:" + Aws.REGION + ":" + Aws.ACCOUNT_ID + ":bucket/caredge-demo-s3table-bucket --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.sql.catalog.defaultCatalog=s3tablescatalog --conf spark.sql.catalog.s3tablescatalog.client.region=" + Aws.REGION
                         }
                     },
                     "configurationOverrides": {
@@ -393,7 +396,12 @@ class S3TableCdkStack(Stack):
                                 "spark.hadoop.hive.metastore.glue.catalogid": Aws.ACCOUNT_ID,
                                 "spark.sql.catalogImplementation": "hive"
                             }
-                        }]
+                        }],
+                        "monitoringConfiguration": {
+                            "s3MonitoringConfiguration": {
+                                "logUri": f"s3://{data_bucket.bucket_name}/logs/"
+                            }
+                        }
                     }
                 },
                 "physical_resource_id": cr.PhysicalResourceId.of("EMRServerlessJobRun")

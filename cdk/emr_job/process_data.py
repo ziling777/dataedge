@@ -1,7 +1,14 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_date, col
+import sys
 
 def main():
+    # 获取命令行参数中的S3桶名
+    if len(sys.argv) > 1:
+        bucket_name = sys.argv[1]
+    else:
+        # 默认桶名，如果没有提供参数
+        bucket_name = "default-bucket-name"
     # 创建SparkSession
     spark = SparkSession.builder \
         .appName("数据处理作业") \
@@ -11,7 +18,7 @@ def main():
         .getOrCreate()
     
     # 从S3读取处理后的数据
-    input_path = "s3://{{data_bucket_name}}/processed/"
+    input_path = f"s3://{bucket_name}/processed/"
     df = spark.read.parquet(input_path)
     
     # 处理数据
@@ -24,10 +31,10 @@ def main():
         .format("parquet") \
         .mode("overwrite") \
         .partitionBy("processed_date") \
-        .option("path", "s3://{{data_bucket_name}}/table/") \
+        .option("path", f"s3://{bucket_name}/table/") \
         .saveAsTable("data_lake_db.processed_data")
     
     spark.stop()
 
 if __name__ == "__main__":
-    main() 
+    main()
