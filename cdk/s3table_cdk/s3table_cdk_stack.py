@@ -49,13 +49,13 @@ class S3TableCdkStack(Stack):
             s3.NotificationKeyFilter(prefix="raw/", suffix=".zip")
         )
 
-        # 创建 lambda Layer
+        # 创建 lambda Layer - 仅支持ARM架构
         lambda_layer = lambda_.LayerVersion(
             self, "greptime layer",
             code=lambda_.Code.from_asset("lambda_layers/"),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_13],
-            compatible_architectures=[lambda_.Architecture.X86_64, lambda_.Architecture.ARM_64],
-            description="Layer containing greptime required packages"
+            compatible_architectures=[lambda_.Architecture.ARM_64],  # 只支持ARM架构
+            description="Layer containing greptime required packages for ARM64"
         )
 
         # Lambda函数 - 处理SQS消息
