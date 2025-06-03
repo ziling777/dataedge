@@ -1,8 +1,8 @@
 # Python 相关
-__pycache__/
+# __pycache__/  # 注释掉，Lambda层需要这些文件
 *.py[cod]
 *$py.class
-*.so
+# *.so  # 注释掉，Lambda层需要编译的二进制文件
 .Python
 env/
 build/
