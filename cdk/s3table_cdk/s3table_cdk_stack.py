@@ -382,19 +382,23 @@ class S3TableCdkStack(Stack):
                         "sparkSubmit": {
                             "entryPoint": f"s3://{data_bucket.bucket_name}/scripts/process_data.py",
                             "entryPointArguments": [
-                                data_bucket.bucket_name  # 传递S3桶名作为参数
+                                data_bucket.bucket_name,
+                                Aws.ACCOUNT_ID  # 传递账户ID作为catalog名称
                             ],
-                            "sparkSubmitParameters": "--conf spark.executor.cores=4 --conf spark.executor.memory=8g --conf spark.sql.catalog.s3tablescatalog=org.apache.iceberg.spark.SparkCatalog --conf spark.sql.catalog.s3tablescatalog.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog --conf spark.sql.catalog.s3tablescatalog.warehouse=arn:aws:s3tables:" + Aws.REGION + ":" + Aws.ACCOUNT_ID + ":bucket/caredge-demo-s3table-bucket --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions --conf spark.sql.catalog.defaultCatalog=s3tablescatalog --conf spark.sql.catalog.s3tablescatalog.client.region=" + Aws.REGION
+                            "sparkSubmitParameters": "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.3 " +
+                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}=org.apache.iceberg.spark.SparkCatalog " +
+                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog " +
+                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredge-demo-s3table-bucket " +
+                            "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions " +
+                            f"--conf spark.sql.catalog.defaultCatalog={Aws.ACCOUNT_ID} " +
+                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.client.region={Aws.REGION}"
                         }
                     },
                     "configurationOverrides": {
                         "applicationConfiguration": [{
                             "classification": "spark-defaults",
                             "properties": {
-                                "spark.dynamicAllocation.enabled": "true",
-                                "spark.sql.catalog.spark_catalog": "org.apache.spark.sql.hive.HiveCatalog",
-                                "spark.hadoop.hive.metastore.glue.catalogid": Aws.ACCOUNT_ID,
-                                "spark.sql.catalogImplementation": "hive"
+                                "spark.dynamicAllocation.enabled": "true"
                             }
                         }],
                         "monitoringConfiguration": {
