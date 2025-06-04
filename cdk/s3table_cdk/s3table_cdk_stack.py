@@ -164,14 +164,20 @@ class S3TableCdkStack(Stack):
             vpc.vpc_default_security_group
         )
         
-        # 修改默认安全组，允许443端口的入站流量，目标是安全组自身
+        # 修改默认安全组，允许所有入站流量，目标是安全组自身
         default_security_group_rule = ec2.CfnSecurityGroupIngress(
-            self, "DefaultSGIngressHTTPS",
-            ip_protocol="tcp",
-            from_port=443,
-            to_port=443,
+            self, "DefaultSGIngressAll",
+            ip_protocol="-1",  # -1 表示所有协议
             group_id=vpc.vpc_default_security_group,
             source_security_group_id=vpc.vpc_default_security_group  # 目标是安全组自身
+        )
+        
+        # 确保有出站规则允许所有流量到任何地址
+        default_security_group_egress = ec2.CfnSecurityGroupEgress(
+            self, "DefaultSGEgressAll",
+            ip_protocol="-1",  # -1 表示所有协议
+            cidr_ip="0.0.0.0/0",  # 允许到任何地址
+            group_id=vpc.vpc_default_security_group
         )
         
         # 获取私有子网IDs
@@ -189,6 +195,20 @@ class S3TableCdkStack(Stack):
             ),
             security_groups=[default_security_group],  # 使用与EMR相同的安全组
             private_dns_enabled=True  # 启用私有DNS
+        )
+        
+        # 为CloudWatch Logs创建VPC接口端点，解决日志推送超时问题
+        logs_vpc_endpoint = ec2.InterfaceVpcEndpoint(
+            self, "CloudWatchLogsVpcEndpoint",
+            vpc=vpc,
+            service=ec2.InterfaceVpcEndpointService(
+                f"com.amazonaws.{Aws.REGION}.logs"
+            ),
+            subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
+            ),
+            security_groups=[default_security_group],
+            private_dns_enabled=True
         )
         
         # 创建EMR Serverless应用程序，并配置VPC、子网和安全组
