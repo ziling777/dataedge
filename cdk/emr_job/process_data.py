@@ -40,8 +40,21 @@ def main():
         df = df.withColumn("ts", current_date())
     
     # 将毫秒级时间戳转换为日期时间格式
-    # 注意：毫秒时间戳需要除以1000转换为秒级时间戳
-    df = df.withColumn("ts_date", from_unixtime(col("ts")/1000))
+    # 首先检查ts列的数据类型并进行适当的转换
+    # 使用unix_timestamp函数处理TIMESTAMP_NTZ类型
+    from pyspark.sql.functions import unix_timestamp
+    
+    # 检查ts列的数据类型
+    ts_data_type = df.schema["ts"].dataType.typeName()
+    print(f"ts列的数据类型: {ts_data_type}")
+    
+    # 根据数据类型选择不同的转换方法
+    if "timestamp" in ts_data_type.lower():
+        # 如果是时间戳类型，先转换为unix时间戳（秒）
+        df = df.withColumn("ts_date", col("ts"))
+    else:
+        # 如果是数值类型（假设是毫秒时间戳），除以1000转换为秒
+        df = df.withColumn("ts_date", from_unixtime(col("ts")/1000))
     
     # 从转换后的日期时间提取年、月、日用于分区
     df = df.withColumn("year", year("ts_date")) \
