@@ -201,18 +201,6 @@ class S3TableCdkStack(Stack):
             security_groups=[default_security_group],  # 使用与EMR相同的安全组
             private_dns_enabled=True  # 启用私有DNS
         )
-        logs_vpc_endpoint = ec2.InterfaceVpcEndpoint(
-            self, "CloudWatchLogsVpcEndpoint",
-            vpc=vpc,
-            service=ec2.InterfaceVpcEndpointService(
-                f"com.amazonaws.{Aws.REGION}.logs"
-            ),
-            subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
-            ),
-            security_groups=[default_security_group],
-            private_dns_enabled=True
-        )
         
         # 创建EMR Serverless应用程序，并配置VPC、子网和安全组
         emr_app = emrs.CfnApplication(
