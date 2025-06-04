@@ -196,8 +196,6 @@ class S3TableCdkStack(Stack):
             security_groups=[default_security_group],  # 使用与EMR相同的安全组
             private_dns_enabled=True  # 启用私有DNS
         )
-        
-        # 为CloudWatch Logs创建VPC接口端点，解决日志推送超时问题
         logs_vpc_endpoint = ec2.InterfaceVpcEndpoint(
             self, "CloudWatchLogsVpcEndpoint",
             vpc=vpc,
