@@ -188,6 +188,21 @@ class S3TableCdkStack(Stack):
         # 获取私有子网IDs
         private_subnet_ids = [subnet.subnet_id for subnet in vpc.private_subnets]
         
+        # 创建专用于S3 Tables VPC端点的安全组
+        s3tables_endpoint_sg = ec2.SecurityGroup(
+            self, "S3TablesEndpointSG",
+            vpc=vpc,
+            description="Security group for S3 Tables VPC endpoint",
+            allow_all_outbound=True  # 允许所有出站流量
+        )
+        
+        # 添加允许所有入站流量，目标是安全组自身
+        s3tables_endpoint_sg.add_ingress_rule(
+            peer=s3tables_endpoint_sg,
+            connection=ec2.Port.all_traffic(),
+            description="Allow all traffic from self"
+        )
+        
         # 为S3 Tables创建VPC接口端点
         s3tables_vpc_endpoint = ec2.InterfaceVpcEndpoint(
             self, "S3TablesVpcEndpoint",
@@ -198,7 +213,7 @@ class S3TableCdkStack(Stack):
             subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS  # 使用与EMR相同的私有子网
             ),
-            security_groups=[default_security_group],  # 使用与EMR相同的安全组
+            security_groups=[s3tables_endpoint_sg],  # 使用专用安全组
             private_dns_enabled=True  # 启用私有DNS
         )
         
@@ -236,7 +251,7 @@ class S3TableCdkStack(Stack):
             },
             # 添加网络配置
             network_configuration=emrs.CfnApplication.NetworkConfigurationProperty(
-                security_group_ids=[vpc.vpc_default_security_group],
+                security_group_ids=[vpc.vpc_default_security_group, s3tables_endpoint_sg.security_group_id],
                 subnet_ids=private_subnet_ids
             )
         )
@@ -513,6 +528,13 @@ class S3TableCdkStack(Stack):
             self, "S3TablesVpcEndpointId",
             value=s3tables_vpc_endpoint.vpc_endpoint_id,
             description="ID of the S3 Tables VPC Endpoint"
+        )
+        
+        # 输出S3 Tables端点安全组ID
+        CfnOutput(
+            self, "S3TablesEndpointSecurityGroupId",
+            value=s3tables_endpoint_sg.security_group_id,
+            description="ID of the S3 Tables Endpoint Security Group"
         )
 
         # 输出Glue联邦目录名称
