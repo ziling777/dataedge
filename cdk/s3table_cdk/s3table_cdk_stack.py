@@ -158,6 +158,40 @@ class S3TableCdkStack(Stack):
             description="ARN of the EMR Serverless execution role"
         )
         
+        # 获取默认安全组
+        default_security_group = ec2.SecurityGroup.from_security_group_id(
+            self, "DefaultSecurityGroup",
+            vpc.vpc_default_security_group
+        )
+        
+        # 修改默认安全组，允许443端口的入站流量，目标是安全组自身
+        default_security_group_rule = ec2.CfnSecurityGroupIngress(
+            self, "DefaultSGIngressHTTPS",
+            ip_protocol="tcp",
+            from_port=443,
+            to_port=443,
+            group_id=vpc.vpc_default_security_group,
+            source_security_group_id=vpc.vpc_default_security_group  # 目标是安全组自身
+        )
+        
+        # 获取私有子网IDs
+        private_subnet_ids = [subnet.subnet_id for subnet in vpc.private_subnets]
+        
+        # 为S3 Tables创建VPC接口端点
+        s3tables_vpc_endpoint = ec2.InterfaceVpcEndpoint(
+            self, "S3TablesVpcEndpoint",
+            vpc=vpc,
+            service=ec2.InterfaceVpcEndpointService(
+                f"com.amazonaws.{Aws.REGION}.s3tables"
+            ),
+            subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS  # 使用与EMR相同的私有子网
+            ),
+            security_groups=[default_security_group],  # 使用与EMR相同的安全组
+            private_dns_enabled=True  # 启用私有DNS
+        )
+        
+        # 创建EMR Serverless应用程序，并配置VPC、子网和安全组
         emr_app = emrs.CfnApplication(
             self, "DataProcessingEMRApp",
             release_label="emr-7.7.0",
@@ -188,8 +222,16 @@ class S3TableCdkStack(Stack):
             maximum_capacity={
                 "cpu": "200vCPU",
                 "memory": "800GB"
-            }
+            },
+            # 添加网络配置
+            network_configuration=emrs.CfnApplication.NetworkConfigurationProperty(
+                security_group_ids=[vpc.vpc_default_security_group],
+                subnet_ids=private_subnet_ids
+            )
         )
+        
+        # 确保EMR应用程序在VPC端点创建后启动
+        emr_app.add_depends_on(s3tables_vpc_endpoint)
 
         # S3 Table Bucket
         cfn_table_bucket = s3tables.CfnTableBucket(
@@ -335,6 +377,21 @@ class S3TableCdkStack(Stack):
             destination_bucket=data_bucket,
             destination_key_prefix="scripts"
         )
+        
+        # 创建一个S3桶用于存放JAR文件
+        jar_bucket = s3.Bucket(
+            self, "JarFilesBucket",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True
+        )
+        
+        # 上传JAR文件到S3
+        jar_deployment = s3deploy.BucketDeployment(
+            self, "DeployJarFiles",
+            sources=[s3deploy.Source.asset("jar_files")],  # 假设JAR文件存放在项目的jar_files目录
+            destination_bucket=jar_bucket,
+            destination_key_prefix="jar"
+        )
 
         # 创建一个自定义资源的IAM策略，允许PassRole操作
         emr_custom_resource_role = iam.Role(
@@ -382,16 +439,18 @@ class S3TableCdkStack(Stack):
                         "sparkSubmit": {
                             "entryPoint": f"s3://{data_bucket.bucket_name}/scripts/process_data.py",
                             "entryPointArguments": [
-                                data_bucket.bucket_name,
-                                Aws.ACCOUNT_ID  # 传递账户ID作为catalog名称
+                                data_bucket.bucket_name
                             ],
                             "sparkSubmitParameters": "--packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.3 " +
-                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}=org.apache.iceberg.spark.SparkCatalog " +
-                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog " +
-                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredge-demo-s3table-bucket " +
+                            "--conf spark.executor.cores=4 " +
+                            "--conf spark.executor.memory=16g " +
+                            f"--conf spark.sql.catalog.gpdemo=org.apache.iceberg.spark.SparkCatalog " +
+                            f"--conf spark.sql.catalog.gpdemo.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog " +
+                            f"--conf spark.sql.catalog.gpdemo.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredge-demo-s3table-bucket " +
                             "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions " +
-                            f"--conf spark.sql.catalog.defaultCatalog={Aws.ACCOUNT_ID} " +
-                            f"--conf spark.sql.catalog.{Aws.ACCOUNT_ID}.client.region={Aws.REGION}"
+                            f"--conf spark.sql.catalog.defaultCatalog=gpdemo " +
+                            f"--conf spark.sql.catalog.gpdemo.client.region={Aws.REGION} " +
+                            f"--conf spark.jars=s3://{data_bucket.bucket_name}/jar/*"
                         }
                     },
                     "configurationOverrides": {
@@ -450,6 +509,13 @@ class S3TableCdkStack(Stack):
             self, "S3TablesLakeFormationRoleArn", 
             value=s3tables_lakeformation_role.role_arn,
             description="ARN of the IAM role for Lake Formation to access S3 Tables"
+        )
+        
+        # 输出S3 Tables VPC端点ID
+        CfnOutput(
+            self, "S3TablesVpcEndpointId",
+            value=s3tables_vpc_endpoint.vpc_endpoint_id,
+            description="ID of the S3 Tables VPC Endpoint"
         )
 
         # 输出Glue联邦目录名称
