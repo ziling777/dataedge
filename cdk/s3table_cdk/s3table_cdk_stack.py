@@ -231,7 +231,8 @@ class S3TableCdkStack(Stack):
         )
         
         # 确保EMR应用程序在VPC端点创建后启动
-        emr_app.add_depends_on(s3tables_vpc_endpoint)
+        # 使用node.add_dependency代替add_depends_on，因为InterfaceVpcEndpoint不是CfnResource类型
+        emr_app.node.add_dependency(s3tables_vpc_endpoint)
 
         # S3 Table Bucket
         cfn_table_bucket = s3tables.CfnTableBucket(
@@ -376,21 +377,6 @@ class S3TableCdkStack(Stack):
             sources=[s3deploy.Source.asset("emr_job")],
             destination_bucket=data_bucket,
             destination_key_prefix="scripts"
-        )
-        
-        # 创建一个S3桶用于存放JAR文件
-        jar_bucket = s3.Bucket(
-            self, "JarFilesBucket",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
-        )
-        
-        # 上传JAR文件到S3
-        jar_deployment = s3deploy.BucketDeployment(
-            self, "DeployJarFiles",
-            sources=[s3deploy.Source.asset("jar_files")],  # 假设JAR文件存放在项目的jar_files目录
-            destination_bucket=jar_bucket,
-            destination_key_prefix="jar"
         )
 
         # 创建一个自定义资源的IAM策略，允许PassRole操作
