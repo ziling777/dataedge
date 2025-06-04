@@ -56,16 +56,33 @@ def main():
         # 如果是数值类型（假设是毫秒时间戳），除以1000转换为秒
         df = df.withColumn("ts_date", from_unixtime(col("ts")/1000))
     
-    # 从转换后的日期时间提取年、月、日用于分区
+    # 从转换后的日期时间提取年、月、日
     df = df.withColumn("year", year("ts_date")) \
            .withColumn("month", month("ts_date")) \
            .withColumn("day", day("ts_date"))
     
-    print(f"正在将数据按时间分区写入表: {table_store}")
+    # 先尝试创建表，使用Iceberg的分区语法
+    try:
+        spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {table_store} (
+            ts TIMESTAMP,
+            ts_date TIMESTAMP,
+            year INT,
+            month INT,
+            day INT
+        )
+        USING iceberg
+        """)
+        print(f"表 {table_store} 已创建或已存在")
+    except Exception as e:
+        print(f"创建表时出错: {str(e)}")
+    
+    print(f"正在将数据写入表: {table_store}")
+    # 不使用partitionBy，直接写入表
     df.write \
         .format("iceberg") \
         .mode("overwrite") \
-        .partitionBy("year", "month", "day") \
+        .option("write.format.default", "parquet") \
         .saveAsTable(table_store)
     
     # 查询写入的数据
@@ -78,9 +95,12 @@ def main():
     print("表中的总行数:")
     count_df.show()
     
-    # 查看表的分区信息
-    print("表的分区信息:")
-    spark.sql(f"SHOW PARTITIONS {table_store}").show()
+    # 尝试查看表的元数据信息，而不是分区信息
+    print("表的元数据信息:")
+    try:
+        spark.sql(f"DESCRIBE TABLE EXTENDED {table_store}").show(truncate=False)
+    except Exception as e:
+        print(f"获取表元数据时出错: {str(e)}")
     
     spark.stop()
 
