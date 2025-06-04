@@ -151,19 +151,9 @@ class S3TableCdkStack(Stack):
             )
         )
         
-        # 添加CloudWatch日志权限
-        emr_execution_role.add_to_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "logs:CreateLogGroup",
-                    "logs:CreateLogStream",
-                    "logs:PutLogEvents",
-                    "logs:DescribeLogGroups",
-                    "logs:DescribeLogStreams"
-                ],
-                resources=["*"]
-            )
+        # 添加CloudWatch完整权限
+        emr_execution_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchFullAccess")
         )
         
         # 输出EMR执行角色的ARN
