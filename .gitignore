@@ -1,10 +1,13 @@
-# Python 相关
-# __pycache__/  # 注释掉，Lambda层需要这些文件
+# Large JAR files
+cdk/emr_job/jar/*.jar
+
+# Python cache
+__pycache__/
 *.py[cod]
 *$py.class
-# *.so  # 注释掉，Lambda层需要编译的二进制文件
+
+# Distribution / packaging
 .Python
-env/
 build/
 develop-eggs/
 dist/
@@ -20,58 +23,73 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.pytest_cache/
-.coverage
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
 htmlcov/
 .tox/
-.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
 
-# CDK 相关
-cdk.out/
-cdk.context.json
-.cdk-staging/
-.cdk.staging/
-cdk-outputs.json
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# 虚拟环境
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
 venv/
 ENV/
-env/
-.env/
-.venv/
 env.bak/
 venv.bak/
 
-# IDE 相关
-.idea/
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# CDK
+cdk.out/
+node_modules/
+
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
-.project
-.pydevproject
-.settings/
 
-# 操作系统相关
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# 日志文件
-*.log
-logs/
-
-# 本地配置和敏感信息
-.env
-.env.local
-*.pem
-*.key
-secrets.json
-config.local.json
-
-# 临时文件
-tmp/
-temp/
