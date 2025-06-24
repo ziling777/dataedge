@@ -1,5 +1,5 @@
-# Large JAR files
-cdk/emr_job/jar/*.jar
+# Large JAR files are now handled by Git LFS
+# cdk/emr_job/jar/*.jar
 
 # Python cache
 __pycache__/
