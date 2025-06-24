@@ -267,8 +267,8 @@ class S3TableCdkStack(Stack):
 
         # S3 Table Bucket
         cfn_table_bucket = s3tables.CfnTableBucket(
-            self, "caredge-demo-s3table-bucket",
-            table_bucket_name = "caredge-demo-s3table-bucket"
+            self, "caredgetest",
+            table_bucket_name = "caredgetest"
         )
 
         s3tables_lakeformation_role_policy = iam.PolicyStatement(
@@ -397,7 +397,7 @@ class S3TableCdkStack(Stack):
             properties={
                 "Region": Aws.REGION,
                 "AccountId": Aws.ACCOUNT_ID,
-                "Version": "1.1",  # 每次需要更新时递增此值
+                "Version": "1.2",  # 每次需要更新时递增此值
                 "Timestamp": str(int(time.time()))  # 添加时间戳确保每次部署都不同
             }
         )
@@ -463,7 +463,7 @@ class S3TableCdkStack(Stack):
                             "--conf spark.executor.memory=16g " +
                             f"--conf spark.sql.catalog.gpdemo=org.apache.iceberg.spark.SparkCatalog " +
                             f"--conf spark.sql.catalog.gpdemo.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog " +
-                            f"--conf spark.sql.catalog.gpdemo.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredge-demo-s3table-bucket " +
+                            f"--conf spark.sql.catalog.gpdemo.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgetest " +
                             "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions " +
                             f"--conf spark.sql.catalog.defaultCatalog=gpdemo " +
                             f"--conf spark.sql.catalog.gpdemo.client.region={Aws.REGION} " +
@@ -698,7 +698,7 @@ class S3TableCdkStack(Stack):
             self, "LakeFormationResourceRegistration",
             service_token=lakeformation_resource_provider.service_token,
             properties={
-                "ResourceArn": f"arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/*",
+                "ResourceArn": f"arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgetest",
                 "ResourceRoleArn": s3tables_lakeformation_role.role_arn,
                 "Version": "1.0",
                 "Timestamp": str(int(time.time()))

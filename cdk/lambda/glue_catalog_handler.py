@@ -25,7 +25,7 @@ def handler(event, context):
                 "Name": "s3tablescatalog",
                 "CatalogInput": {
                     "FederatedCatalog": {
-                        "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/*",
+                        "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/caredgetest",
                         "ConnectionName": "aws:s3tables"
                     },
                     "CreateDatabaseDefaultPermissions": [],
@@ -54,7 +54,7 @@ def handler(event, context):
                         "Name": "s3tablescatalog",
                         "CatalogInput": {
                             "FederatedCatalog": {
-                                "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/*",
+                                "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/caredgetest",
                                 "ConnectionName": "aws:s3tables"
                             },
                             "CreateDatabaseDefaultPermissions": [],
@@ -74,7 +74,7 @@ def handler(event, context):
                         "Name": "s3tablescatalog",
                         "CatalogInput": {
                             "FederatedCatalog": {
-                                "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/*",
+                                "Identifier": f"arn:aws:s3tables:{event['ResourceProperties']['Region']}:{event['ResourceProperties']['AccountId']}:bucket/caredgetest",
                                 "ConnectionName": "aws:s3tables"
                             },
                             "CreateDatabaseDefaultPermissions": [],

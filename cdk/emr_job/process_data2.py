@@ -30,16 +30,9 @@ def main():
     # 定义canbus01表的结构 - 为S3 Tables添加主键
     canbus01_table = f"{catalog_name}.greptime.canbus01"
     
-    # 先删除现有表（如果存在）
-    try:
-        spark.sql(f"DROP TABLE IF EXISTS {canbus01_table}")
-        print(f"删除现有表: {canbus01_table}")
-    except Exception as e:
-        print(f"删除表时出错（可能表不存在）: {str(e)}")
-    
-    # 创建canbus01表，使用小写列名
+    # 创建canbus01表，基于MySQL表结构，添加主键
     create_canbus01_sql = f"""
-    CREATE TABLE {canbus01_table} (
+    CREATE TABLE IF NOT EXISTS {canbus01_table} (
         __primary_key STRING,
         vin_id STRING,
         charging_time_remain_minute INT,
@@ -80,80 +73,16 @@ def main():
         print("数据预览:")
         df.show(5, truncate=False)
         
-        # 步骤1：移除GreptimeDB特有的列
-        columns_to_drop = ["__sequence", "__op_type"]
-        df_cleaned = df
-        for col_name in columns_to_drop:
-            if col_name in df.columns:
-                df_cleaned = df_cleaned.drop(col_name)
-                print(f"移除列: {col_name}")
+        # 为数据添加主键列 - 使用vin_id和ts的组合
+        df_with_pk = df.withColumn("__primary_key", 
+                                   concat(col("vin_id"), lit("_"), col("ts").cast("string")))
         
-        # 如果存在原始的__primary_key列，也删除它，我们会重新创建
-        if "__primary_key" in df_cleaned.columns:
-            df_cleaned = df_cleaned.drop("__primary_key")
-            print("移除原始__primary_key列")
-        
-        # 步骤2：重命名列以匹配表结构（转换为小写）
-        column_mapping = {
-            "Charging_Time_Remain_Minute": "charging_time_remain_minute",
-            "Extender_Starting_Point": "extender_starting_point", 
-            "Fuel_CLTC_Mileage": "fuel_cltc_mileage",
-            "Fuel_WLTC_Mileage": "fuel_wltc_mileage",
-            "Fuel_Percentage": "fuel_percentage",
-            "Clean_Mode": "clean_mode",
-            "Road_Mode": "road_mode",
-            "RESS_Power_Low_Flag": "ress_power_low_flag",
-            "Target_SOC": "target_soc",
-            "DISPLAY_SPEED": "display_speed",
-            "Endurance_Type": "endurance_type"
-        }
-        
-        # 应用列名映射
-        for old_name, new_name in column_mapping.items():
-            if old_name in df_cleaned.columns:
-                df_cleaned = df_cleaned.withColumnRenamed(old_name, new_name)
-                print(f"重命名列: {old_name} -> {new_name}")
-        
-        # 步骤3：为数据添加主键列
-        df_with_pk = df_cleaned.withColumn("__primary_key", 
-                                          concat(col("vin_id"), lit("_"), col("ts").cast("string")))
-        
-        print("数据清理和重命名后的schema:")
+        print("添加主键后的数据schema:")
         df_with_pk.printSchema()
-        
-        # 步骤4：确保列顺序与表定义匹配
-        expected_columns = [
-            "__primary_key", "vin_id", "charging_time_remain_minute", "extender_starting_point",
-            "fuel_cltc_mileage", "fuel_wltc_mileage", "fuel_percentage", "clean_mode", 
-            "road_mode", "ress_power_low_flag", "target_soc", "display_speed", 
-            "channel_id", "endurance_type", "ts"
-        ]
-        
-        # 检查所有期望的列是否存在
-        missing_columns = []
-        for col_name in expected_columns:
-            if col_name not in df_with_pk.columns:
-                missing_columns.append(col_name)
-        
-        if missing_columns:
-            print(f"警告：缺少以下列: {missing_columns}")
-            print(f"实际列: {df_with_pk.columns}")
-        
-        # 选择并重新排序列（只选择存在的列）
-        available_columns = [col_name for col_name in expected_columns if col_name in df_with_pk.columns]
-        df_final = df_with_pk.select(*available_columns)
-        
-        print("最终准备插入的数据schema:")
-        df_final.printSchema()
-        print(f"最终数据行数: {df_final.count()}")
-        
-        # 显示最终数据预览
-        print("最终数据预览:")
-        df_final.show(5, truncate=False)
         
         # 将数据写入canbus01表
         print(f"正在将数据写入表: {canbus01_table}")
-        df_final.write \
+        df_with_pk.write \
             .format("iceberg") \
             .mode("append") \
             .saveAsTable(canbus01_table)
