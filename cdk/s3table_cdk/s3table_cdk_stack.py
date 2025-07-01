@@ -4,6 +4,7 @@ from aws_cdk import (
     RemovalPolicy,
     CfnOutput,
     Aws,
+    Size,
     aws_s3 as s3,
     aws_s3tables as s3tables,
     aws_sqs as sqs,
@@ -15,7 +16,6 @@ from aws_cdk import (
     aws_glue as glue,
     aws_lakeformation as lakeformation,
     aws_emrserverless as emrs,
-    aws_athena as athena,
     aws_s3_deployment as s3deploy,
     custom_resources as cr,
     CustomResource
@@ -267,8 +267,8 @@ class S3TableCdkStack(Stack):
 
         # S3 Table Bucket
         cfn_table_bucket = s3tables.CfnTableBucket(
-            self, "caredgetest",
-            table_bucket_name = "caredgetest"
+            self, "caredgedemo",
+            table_bucket_name = "caredgedemo"
         )
 
         s3tables_lakeformation_role_policy = iam.PolicyStatement(
@@ -289,7 +289,10 @@ class S3TableCdkStack(Stack):
         s3tables_lakeformation_role = iam.Role(
             self, "S3TablesRoleForLakeFormationDemo",
             role_name="S3TablesRoleForLakeFormationDemo",
-            assumed_by=iam.ServicePrincipal("lakeformation.amazonaws.com")
+            assumed_by=iam.ServicePrincipal("lakeformation.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess")
+            ]
         )
 
         s3tables_lakeformation_role.assume_role_policy.add_statements(
@@ -402,12 +405,23 @@ class S3TableCdkStack(Stack):
             }
         )
 
-        # 上传EMR作业脚本到S3
+        # 分别上传脚本和JAR文件
+        # 1. 上传Python脚本（小文件）
         script_deployment = s3deploy.BucketDeployment(
             self, "DeployProcessScript",
-            sources=[s3deploy.Source.asset("emr_job")],
+            sources=[s3deploy.Source.asset("emr_job", exclude=["jar/**"])],  # 排除jar目录
             destination_bucket=data_bucket,
             destination_key_prefix="scripts"
+        )
+        
+        # 2. 单独上传JAR文件（大文件，需要更多内存）
+        jar_deployment = s3deploy.BucketDeployment(
+            self, "DeployJarFiles",
+            sources=[s3deploy.Source.asset("emr_job/jar")],
+            destination_bucket=data_bucket,
+            destination_key_prefix="scripts/jar",
+            memory_limit=3008,  # 最大内存 3GB
+            ephemeral_storage_size=Size.gibibytes(10)  # 增加临时存储空间
         )
 
         # 创建一个自定义资源的IAM策略，允许PassRole操作
@@ -463,7 +477,7 @@ class S3TableCdkStack(Stack):
                             "--conf spark.executor.memory=16g " +
                             f"--conf spark.sql.catalog.gpdemo=org.apache.iceberg.spark.SparkCatalog " +
                             f"--conf spark.sql.catalog.gpdemo.catalog-impl=software.amazon.s3tables.iceberg.S3TablesCatalog " +
-                            f"--conf spark.sql.catalog.gpdemo.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgetest " +
+                            f"--conf spark.sql.catalog.gpdemo.warehouse=arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgedemo " +
                             "--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions " +
                             f"--conf spark.sql.catalog.defaultCatalog=gpdemo " +
                             f"--conf spark.sql.catalog.gpdemo.client.region={Aws.REGION} " +
@@ -501,17 +515,9 @@ class S3TableCdkStack(Stack):
             role=emr_custom_resource_role  # 使用新创建的角色
         )
 
-        # 确保作业依赖于脚本部署
+        # 确保作业依赖于脚本和JAR文件部署
         emr_job_custom_resource.node.add_dependency(script_deployment)
-
-        # 为Athena创建IAM角色
-        athena_role = iam.Role(
-            self, "AthenaQueryRole",
-            assumed_by=iam.ServicePrincipal("athena.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonAthenaFullAccess")
-            ]
-        )
+        emr_job_custom_resource.node.add_dependency(jar_deployment)
 
         # 输出重要资源信息
         CfnOutput(self, "DataBucketName", value=data_bucket.bucket_name)
@@ -519,8 +525,6 @@ class S3TableCdkStack(Stack):
         CfnOutput(self, "LambdaFunction", value=processing_lambda.function_name)
         CfnOutput(self, "EMRServerlessAppId", value=emr_app.attr_application_id)
         CfnOutput(self, "EC2InstanceId", value=instance.instance_id)
-        CfnOutput(self, "GlueDatabaseName", value="data_lake_db")
-        CfnOutput(self, "AthenaWorkgroup", value="data-analysis-workgroup")
         # 输出S3 Tables角色ARN
         CfnOutput(
             self, "S3TablesLakeFormationRoleArn", 
@@ -698,7 +702,7 @@ class S3TableCdkStack(Stack):
             self, "LakeFormationResourceRegistration",
             service_token=lakeformation_resource_provider.service_token,
             properties={
-                "ResourceArn": f"arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgetest",
+                "ResourceArn": f"arn:aws:s3tables:{Aws.REGION}:{Aws.ACCOUNT_ID}:bucket/caredgedemo",
                 "ResourceRoleArn": s3tables_lakeformation_role.role_arn,
                 "Version": "1.0",
                 "Timestamp": str(int(time.time()))

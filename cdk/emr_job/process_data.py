@@ -30,41 +30,65 @@ def main():
     # 定义canbus01表的结构 - 为S3 Tables添加主键
     canbus01_table = f"{catalog_name}.greptime.canbus01"
     
-    # 先删除现有表（如果存在）
+    # 检查表是否存在
+    table_exists = False
     try:
-        spark.sql(f"DROP TABLE IF EXISTS {canbus01_table}")
-        print(f"删除现有表: {canbus01_table}")
+        # 使用 Spark Catalog 检查表是否存在
+        table_exists = spark.catalog.tableExists(canbus01_table)
+        print(f"表 {canbus01_table} 存在性检查: {table_exists}")
     except Exception as e:
-        print(f"删除表时出错（可能表不存在）: {str(e)}")
+        print(f"检查表存在性时出错: {str(e)}")
+        table_exists = False
     
-    # 创建canbus01表，使用小写列名
-    create_canbus01_sql = f"""
-    CREATE TABLE {canbus01_table} (
-        __primary_key STRING,
-        vin_id STRING,
-        charging_time_remain_minute INT,
-        extender_starting_point INT,
-        fuel_cltc_mileage INT,
-        fuel_wltc_mileage INT,
-        fuel_percentage INT,
-        clean_mode INT,
-        road_mode INT,
-        ress_power_low_flag BOOLEAN,
-        target_soc INT,
-        display_speed FLOAT,
-        channel_id INT,
-        endurance_type INT,
-        ts TIMESTAMP
-    ) USING ICEBERG
-    PARTITIONED BY (days(ts))
-    TBLPROPERTIES (
-        'write.format.default' = 'parquet',
-        'write.parquet.compression-codec' = 'snappy'
-    )
-    """
-    
-    print(f"创建canbus01表: {canbus01_table}")
-    spark.sql(create_canbus01_sql)
+    # 如果表不存在，则创建表
+    if not table_exists:
+        print(f"表不存在，正在创建表: {canbus01_table}")
+        create_canbus01_sql = f"""
+        CREATE TABLE {canbus01_table} (
+            __primary_key STRING,
+            vin_id STRING,
+            charging_time_remain_minute INT,
+            extender_starting_point INT,
+            fuel_cltc_mileage INT,
+            fuel_wltc_mileage INT,
+            fuel_percentage INT,
+            clean_mode INT,
+            road_mode INT,
+            ress_power_low_flag BOOLEAN,
+            target_soc INT,
+            display_speed FLOAT,
+            channel_id INT,
+            endurance_type INT,
+            ts TIMESTAMP
+        ) USING ICEBERG
+        PARTITIONED BY (days(ts))
+        TBLPROPERTIES (
+            'write.format.default' = 'parquet',
+            'write.parquet.compression-codec' = 'snappy'
+        )
+        """
+        
+        try:
+            spark.sql(create_canbus01_sql)
+            print(f"表创建成功: {canbus01_table}")
+        except Exception as e:
+            print(f"创建表时出错: {str(e)}")
+            raise e
+    else:
+        print(f"表已存在，将追加数据到: {canbus01_table}")
+        
+        # 显示现有表的schema以便对比
+        try:
+            existing_df = spark.sql(f"SELECT * FROM {canbus01_table} LIMIT 1")
+            print("现有表的schema:")
+            existing_df.printSchema()
+            
+            # 显示现有数据行数
+            count_result = spark.sql(f"SELECT COUNT(*) as count FROM {canbus01_table}").collect()
+            existing_count = count_result[0]['count']
+            print(f"现有表中的数据行数: {existing_count}")
+        except Exception as e:
+            print(f"查询现有表信息时出错: {str(e)}")
     
     # 从S3读取处理后的数据
     input_path = f"s3://{bucket_name}/processed/"
@@ -152,13 +176,40 @@ def main():
         df_final.show(5, truncate=False)
         
         # 将数据写入canbus01表
-        print(f"正在将数据写入表: {canbus01_table}")
-        df_final.write \
-            .format("iceberg") \
-            .mode("append") \
-            .saveAsTable(canbus01_table)
+        print(f"正在将数据追加到表: {canbus01_table}")
+        print(f"准备写入的数据行数: {df_final.count()}")
         
-        print("数据写入成功!")
+        try:
+            df_final.write \
+                .format("iceberg") \
+                .mode("append") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(canbus01_table)
+            
+            print("数据追加成功!")
+            
+            # 显示追加后的总行数
+            count_result = spark.sql(f"SELECT COUNT(*) as count FROM {canbus01_table}").collect()
+            total_count = count_result[0]['count']
+            print(f"追加后表中的总行数: {total_count}")
+            
+        except Exception as write_error:
+            print(f"写入数据时出错: {str(write_error)}")
+            print("尝试检查数据兼容性...")
+            
+            # 如果写入失败，显示更多调试信息
+            print("准备写入的数据schema:")
+            df_final.printSchema()
+            
+            # 尝试查询现有表的schema进行对比
+            try:
+                existing_schema = spark.sql(f"DESCRIBE {canbus01_table}")
+                print("现有表的schema:")
+                existing_schema.show(truncate=False)
+            except Exception as desc_error:
+                print(f"无法获取现有表schema: {str(desc_error)}")
+            
+            raise write_error
         
         # 查询写入的数据
         print(f"查询表 {canbus01_table} 中的数据:")
@@ -226,12 +277,24 @@ def main():
         sample_df.printSchema()
         
         # 写入示例数据（已经包含主键）
-        sample_df.write \
-            .format("iceberg") \
-            .mode("append") \
-            .saveAsTable(canbus01_table)
-        
-        print("示例数据写入成功!")
+        print("正在追加示例数据到表...")
+        try:
+            sample_df.write \
+                .format("iceberg") \
+                .mode("append") \
+                .option("mergeSchema", "true") \
+                .saveAsTable(canbus01_table)
+            
+            print("示例数据追加成功!")
+            
+            # 显示追加后的总行数
+            count_result = spark.sql(f"SELECT COUNT(*) as count FROM {canbus01_table}").collect()
+            total_count = count_result[0]['count']
+            print(f"追加示例数据后表中的总行数: {total_count}")
+            
+        except Exception as sample_write_error:
+            print(f"写入示例数据时出错: {str(sample_write_error)}")
+            raise sample_write_error
         
         # 查询示例数据
         result_df = spark.sql(f"SELECT * FROM {canbus01_table}")
