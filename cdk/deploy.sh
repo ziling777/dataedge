@@ -234,7 +234,6 @@ show_deployment_results() {
     echo "1. 检查 S3 存储桶中的数据"
     echo "2. 验证 Lambda 函数运行状态"
     echo "3. 查看 EMR Serverless 应用状态"
-    echo "4. 在 QuickSight 中创建数据源连接"
     echo "=========================================="
 }
 
